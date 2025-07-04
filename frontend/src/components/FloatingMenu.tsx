@@ -3,11 +3,11 @@ import { FloatingDock } from "@/components/ui/floating-dock";
 import {
   IconHome,
   IconNewSection,
-  IconTerminal2,
   IconHandStop,
+  IconBrush,
 } from "@tabler/icons-react";
 
-export function FloatingMenu({ moveMode, setMoveMode }: { moveMode: boolean; setMoveMode: (v: boolean) => void }) {
+export function FloatingMenu({ moveMode, setMoveMode, colorMode, setColorMode }: { moveMode: boolean; setMoveMode: (v: boolean) => void; colorMode: boolean; setColorMode: (v: boolean) => void }) {
   const [activeTitle, setActiveTitle] = React.useState<string | null>(null);
   const handleToggle = (title: string) => {
     if (moveMode && title !== 'Move') return; // block toggling others in move mode
@@ -15,6 +15,9 @@ export function FloatingMenu({ moveMode, setMoveMode }: { moveMode: boolean; set
       setMoveMode(!moveMode);
       if (moveMode) setActiveTitle(null);
       else setActiveTitle('Move');
+    } else if (title === 'Brush') {
+      setColorMode(!colorMode);
+      setActiveTitle(!colorMode ? 'Brush' : null);
     } else {
       setActiveTitle(activeTitle === title ? null : title);
     }
@@ -40,13 +43,13 @@ export function FloatingMenu({ moveMode, setMoveMode }: { moveMode: boolean; set
       onClick: () => handleToggle('Move'),
     },
     {
-      title: "Products",
+      title: "Brush",
       icon: (
-        <IconTerminal2 className={`h-full w-full ${activeTitle === 'Products' ? 'text-neutral-700 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-300'}`} />
+        <IconBrush className={`h-full w-full ${colorMode ? 'text-neutral-700 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-300'}`} />
       ),
       href: "#",
-      selected: activeTitle === 'Products',
-      onClick: () => handleToggle('Products'),
+      selected: colorMode,
+      onClick: () => handleToggle('Brush'),
       disabled: moveMode,
     },
     {

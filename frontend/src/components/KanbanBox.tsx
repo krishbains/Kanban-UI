@@ -9,6 +9,7 @@ interface Task {
   id: string;
   title: string;
   bg: string;
+  isEditing?: boolean;
 }
 
 type KanbanBoxProps = {
@@ -17,26 +18,33 @@ type KanbanBoxProps = {
   bg: string;
   hsva: { h: number; s: number; v: number; a: number };
   onAddTask: (columnId: string) => void;
-  onRenameColumn?: (oldId: string, newId: string) => void;
+  onRenameColumn?: (oldId: string, newTitle: string) => void;
   onDeleteColumn?: (columnId: string) => void;
   onDeleteTasks?: (columnId: string, taskIds: string[]) => void;
   deleteMode: boolean;
   setDeleteMode: (mode: boolean) => void;
   onChangeColour?: (columnId: string, color: string, hsva?: { h: number; s: number; v: number; a: number }) => void;
   moveMode?: boolean;
+  columnTitle: string;
+  autoFocusTitle?: boolean;
+  onRenameTask?: (columnId: string, taskId: string, newTitle: string) => void;
+  onSetTaskEditing?: (columnId: string, taskId: string, editing: boolean) => void;
+  colorMode?: boolean;
+  onColorModeClick?: (target: { type: 'task'|'column', columnId: string, taskId?: string }, anchor: HTMLElement) => void;
 };
 
-export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn, onDeleteColumn, onDeleteTasks, deleteMode, setDeleteMode, onChangeColour, moveMode}: KanbanBoxProps) => {
+export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn, onDeleteColumn, onDeleteTasks, deleteMode, setDeleteMode, onChangeColour, moveMode, columnTitle, autoFocusTitle, onRenameTask, onSetTaskEditing, colorMode = false, onColorModeClick}: KanbanBoxProps) => {
 
   const { setNodeRef, isOver } = useDroppable({
     id: columnId, // This ID must be unique and match what you'll check in handleDragEnd
   });
   const { active, over } = useDndContext();
-  const [isEditing, setIsEditing] = useState(false);
-  const [title, setTitle] = useState(columnId);
+  const [isEditing, setIsEditing] = useState(!!autoFocusTitle);
+  const [title, setTitle] = useState(columnTitle);
   const inputRef = useRef<HTMLInputElement>(null);
   const showGlow = isEditing;
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
+  const titleRef = useRef<HTMLSpanElement>(null);
 
   React.useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -45,7 +53,19 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
     }
   }, [isEditing]);
 
+  React.useEffect(() => {
+    setTitle(columnTitle);
+  }, [columnTitle]);
+
+  React.useEffect(() => {
+    if (autoFocusTitle) setIsEditing(true);
+  }, [autoFocusTitle]);
+
   const handleTitleClick = () => {
+    if (colorMode && onColorModeClick && titleRef.current) {
+      onColorModeClick({ type: 'column', columnId }, titleRef.current);
+      return;
+    }
     setIsEditing(true);
   };
 
@@ -55,7 +75,7 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
 
   const handleTitleBlur = () => {
     setIsEditing(false);
-    if (title !== columnId && onRenameColumn) {
+    if (title !== columnTitle && onRenameColumn) {
       onRenameColumn(columnId, title);
     }
   };
@@ -98,9 +118,14 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
         ref={setNodeRef}
         className={`min-w-[272px] min-h-[578px] flex flex-col rounded-md transition-all p-4 shadow-lg ${isOver ? 'bg-slate-700' : ''} ${bg.startsWith('#') ? '' : bg}`}
         style={bg.startsWith('#') ? { backgroundColor: bg } : undefined}
+        onClick={colorMode && onColorModeClick ? (e) => {
+          if (e.target instanceof HTMLElement && titleRef.current && !e.target.closest('[data-task-box]')) {
+            onColorModeClick({ type: 'column', columnId }, titleRef.current);
+          }
+        } : undefined}
       >
         <h2 className="relative flex justify-center items-center mb-6">
-          {isEditing ? (
+          {isEditing && !colorMode ? (
             <input
               ref={inputRef}
               className="inline-block px-4 py-1 mr-4 max-w-[calc(100%-3rem)] rounded-full bg-gray-800 text-white font-semibold shadow text-base outline-none border border-gray-500 truncate text-center"
@@ -116,6 +141,7 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
             />
           ) : (
             <span
+              ref={titleRef}
               className="inline-block px-4 py-1 mr-4 max-w-[calc(100%-3rem)] rounded-full bg-gray-800 text-white font-semibold shadow text-base cursor-pointer truncate text-center"
               onClick={e => { if (!moveMode) { e.stopPropagation(); handleTitleClick(); } }}
               onPointerDown={e => e.stopPropagation()}
@@ -158,22 +184,54 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
                 const [overCol] = overId.split('-');
                 if (overCol === columnId) {
                   const overIndex = tasks.findIndex(task => `${columnId}-${task.id}` === overId);
-                  // If not found, append at end
-                  const insertAt = overIndex === -1 ? tasks.length : overIndex;
+                  let insertAt = overIndex === -1 ? tasks.length : overIndex;
+                  // Precise drop-at-end logic for skeleton
+                  if (overIndex !== -1 && tasks.length > 0) {
+                    const lastTask = tasks[tasks.length - 1];
+                    const lastTaskId = `${columnId}-${lastTask.id}`;
+                    // Use window.event to get pointer position
+                    let pointerY = 0;
+                    let pointerAvailable = false;
+                    if (overId === lastTaskId && over.rect && typeof window !== 'undefined' && window.event) {
+                      const evt = window.event;
+                      if ('clientY' in evt && typeof evt.clientY === 'number') {
+                        pointerY = evt.clientY;
+                        pointerAvailable = true;
+                      } else if ('touches' in evt && Array.isArray(evt.touches) && evt.touches.length > 0) {
+                        pointerY = evt.touches[0].clientY;
+                        pointerAvailable = true;
+                      }
+                      if (pointerAvailable) {
+                        const lastRect = over.rect;
+                        const lastMidY = lastRect.top + lastRect.height / 2;
+                        if (pointerY > lastMidY) {
+                          // Show skeleton at end
+                          insertAt = tasks.length;
+                        }
+                      }
+                    }
+                  }
                   const items = [...tasks];
-                  items.splice(insertAt, 0, { id: '__skeleton__', title: '', bg: '' });
+                  items.splice(insertAt, 0, { id: '__skeleton__', title: '', bg: '', isEditing: false });
                   return items.map((task) =>
                     task.id === '__skeleton__' ? (
-                      <Task key="__skeleton__" id="__skeleton__" title="" bg="" isPlaceholder/>
+                      <Task key="__skeleton__" id="__skeleton__" title="" bg="" isPlaceholder isEditing={false}/>
                     ) : (
                       <Task 
                         key={`${columnId}-${task.id}`} 
                         id={`${columnId}-${task.id}`} 
                         title={task.title} 
                         bg={task.bg} 
+                        isEditing={task.isEditing}
                         selected={deleteMode && selectedTasks.includes(task.id)}
                         onClick={deleteMode ? (e: React.MouseEvent) => handleTaskClick(e, task.id) : undefined}
-                        disableDrag={deleteMode}
+                        disableDrag={!moveMode || deleteMode}
+                        onRenameTask={onRenameTask}
+                        onSetTaskEditing={onSetTaskEditing}
+                        columnId={columnId}
+                        taskId={task.id}
+                        colorMode={colorMode}
+                        data-task-box
                       />
                     )
                   );
@@ -186,15 +244,27 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
                   // Hide the original while dragging
                   return null;
                 }
+                const taskRef = React.createRef<HTMLDivElement>();
                 return (
                   <Task 
                     key={scopedId} 
                     id={scopedId} 
                     title={task.title} 
                     bg={task.bg} 
+                    isEditing={task.isEditing && !colorMode}
                     selected={deleteMode && selectedTasks.includes(task.id)}
-                    onClick={deleteMode ? (e: React.MouseEvent) => handleTaskClick(e, task.id) : undefined}
-                    disableDrag={deleteMode}
+                    onClick={colorMode && onColorModeClick ? (e) => {
+                      e.stopPropagation();
+                      if (taskRef.current) onColorModeClick({ type: 'task', columnId, taskId: task.id }, taskRef.current);
+                    } : (deleteMode ? (e: React.MouseEvent) => handleTaskClick(e, task.id) : undefined)}
+                    data-task-box
+                    disableDrag={!moveMode || deleteMode}
+                    onRenameTask={onRenameTask}
+                    onSetTaskEditing={onSetTaskEditing}
+                    columnId={columnId}
+                    taskId={task.id}
+                    colorMode={colorMode}
+                    ref={taskRef}
                   />
                 );
               });

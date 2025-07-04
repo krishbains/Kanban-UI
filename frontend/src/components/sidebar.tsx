@@ -3,11 +3,14 @@ import { cn } from "@/lib/utils";
 import React, { useState, createContext, useContext } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { IconMenu2, IconX } from "@tabler/icons-react";
+import Board from "@/app/Board";
+import { Column } from "@/app/Board";
 
 interface Links {
   label: string;
   href: string;
   icon: React.JSX.Element | React.ReactNode;
+  onClick?: () => void;
 }
 
 interface SidebarContextProps {
@@ -186,17 +189,31 @@ export const SidebarLink = ({
   );
 };
 
-// New component for easy sidebar usage
+// Update documents state type
+type Document = {
+  name: string;
+  config: undefined | Column[];
+};
+
 export const SidebarWrapper = ({
-  children,
   className,
   animate = true,
 }: {
-  children: React.ReactNode;
   className?: string;
   animate?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
+  const [showDocumentsView, setShowDocumentsView] = useState(false);
+  const [showJsonInput, setShowJsonInput] = useState(false);
+  const [documents, setDocuments] = useState<Document[]>([
+    {
+      name: "Document1",
+      config: undefined, // undefined means use Board's default config
+    },
+  ]);
+  const [selectedDocIdx, setSelectedDocIdx] = useState(0);
+  const [jsonInput, setJsonInput] = useState("");
+  const [jsonError, setJsonError] = useState("");
 
   // Example navigation links - you can customize these
   const navigationLinks: Links[] = [
@@ -227,7 +244,7 @@ export const SidebarWrapper = ({
     },
     {
       label: "Documents",
-      href: "/documents",
+      href: "#",
       icon: (
         <svg
           className="w-5 h-5 text-blue-400"
@@ -243,6 +260,7 @@ export const SidebarWrapper = ({
           />
         </svg>
       ),
+      onClick: () => setShowDocumentsView(true),
     },
     {
       label: "Collaboration",
@@ -290,71 +308,183 @@ export const SidebarWrapper = ({
     },
   ];
 
+  // Render sidebar content
+  const renderSidebarContent = () => {
+    if (showDocumentsView) {
+      return (
+        <div className="flex flex-col h-full">
+          {/* Back button */}
+          <button
+            className="mb-4 text-white flex items-center gap-2 hover:underline"
+            onClick={() => setShowDocumentsView(false)}
+          >
+            <span>&larr;</span> Back
+          </button>
+          {/* Documents list */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="mb-2 text-white font-semibold">Documents</div>
+            <ul className="space-y-2">
+              {documents.map((doc, idx) => (
+                <li key={idx}>
+                  <button
+                    className={`w-full text-left px-2 py-1 rounded ${selectedDocIdx === idx ? "bg-blue-700 text-white" : "bg-neutral-800 text-gray-200"}`}
+                    onClick={() => setSelectedDocIdx(idx)}
+                  >
+                    {doc.name} {idx === selectedDocIdx && <span className="text-xs">(current)</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {/* Add new document */}
+          <div className="mt-4">
+            {showJsonInput ? (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  className="w-full h-32 p-2 rounded bg-neutral-900 text-white border border-neutral-700"
+                  placeholder="Paste your JSON config here..."
+                  value={jsonInput}
+                  onChange={e => setJsonInput(e.target.value)}
+                />
+                {jsonError && <div className="text-red-400 text-xs">{jsonError}</div>}
+                <div className="flex gap-2">
+                  <button
+                    className="bg-blue-600 text-white px-3 py-1 rounded"
+                    onClick={() => {
+                      try {
+                        const parsed = JSON.parse(jsonInput);
+                        if (!Array.isArray(parsed)) throw new Error("Config must be an array of columns");
+                        setDocuments(prev => ([...prev, { name: `Document${prev.length + 1}`, config: parsed }]));
+                        setSelectedDocIdx(documents.length); // select new doc
+                        setJsonInput("");
+                        setJsonError("");
+                        setShowJsonInput(false);
+                      } catch (e: unknown) {
+                        setJsonError(e instanceof Error ? e.message : "Invalid JSON");
+                      }
+                    }}
+                  >
+                    Submit
+                  </button>
+                  <button
+                    className="bg-neutral-700 text-white px-3 py-1 rounded"
+                    onClick={() => {
+                      setShowJsonInput(false);
+                      setJsonInput("");
+                      setJsonError("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="w-full bg-blue-600 text-white px-3 py-2 rounded mt-2"
+                onClick={() => setShowJsonInput(true)}
+              >
+                + Add Document
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+    // Default sidebar content
+    return (
+      <div className="flex flex-col h-full">
+        {/* Logo/Brand Section */}
+        <div className="flex items-center gap-2 mb-8">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold text-sm">C8</span>
+          </div>
+          <motion.span
+            animate={{
+              display: animate ? (open ? "inline-block" : "none") : "inline-block",
+              opacity: animate ? (open ? 1 : 0) : 1,
+            }}
+            className="text-lg font-semibold text-white"
+          >
+            Kanban-UI
+          </motion.span>
+        </div>
+        {/* Navigation Links */}
+        <nav className="flex-1 space-y-2">
+          {navigationLinks.map((link, index) => (
+            link.label === "Documents" ? (
+              <button
+                key={index}
+                className={cn(
+                  "flex items-center justify-start gap-2 group/sidebar py-2 hover:bg-neutral-800 dark:hover:bg-neutral-900 rounded-lg px-2 transition-colors text-white w-full"
+                )}
+                onClick={link.onClick}
+              >
+                <span className="w-5 h-5 text-blue-400">{link.icon}</span>
+                <motion.span
+                  animate={{
+                    display: animate ? (open ? "inline-block" : "none") : "inline-block",
+                    opacity: animate ? (open ? 1 : 0) : 1,
+                  }}
+                  className="text-white text-sm group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre inline-block !p-0 !m-0"
+                >
+                  {link.label}
+                </motion.span>
+              </button>
+            ) : (
+              <SidebarLink
+                key={index}
+                link={link}
+                className={cn(
+                  "hover:bg-neutral-800 dark:hover:bg-neutral-900 rounded-lg px-2 transition-colors text-white"
+                )}
+              />
+            )
+          ))}
+        </nav>
+        {/* User Profile Section */}
+        <div className="mt-auto pt-4 border-t border-neutral-700 dark:border-neutral-900">
+          <div className="flex items-center gap-2 py-2">
+            <div className="w-8 h-8 bg-neutral-800 dark:bg-neutral-900 rounded-full flex items-center justify-center">
+              <span className="text-white text-sm font-medium">
+                U
+              </span>
+            </div>
+            <motion.div
+              animate={{
+                display: animate ? (open ? "block" : "none") : "block",
+                opacity: animate ? (open ? 1 : 0) : 1,
+              }}
+              className="flex-1"
+            >
+              <p className="text-sm font-medium text-white">
+                User Name
+              </p>
+              <p className="text-xs text-gray-300">
+                user@example.com
+              </p>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Main content area: render Board with selected document config
+  const renderMainContent = () => {
+    const doc = documents[selectedDocIdx];
+    return <Board columns={doc.config} />;
+  };
+
   return (
     <div className={cn("flex h-screen", className)}>
       <Sidebar open={open} setOpen={setOpen} animate={animate}>
         <SidebarBody>
-          <div className="flex flex-col h-full">
-            {/* Logo/Brand Section */}
-            <div className="flex items-center gap-2 mb-8">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">C8</span>
-              </div>
-              <motion.span
-                animate={{
-                  display: animate ? (open ? "inline-block" : "none") : "inline-block",
-                  opacity: animate ? (open ? 1 : 0) : 1,
-                }}
-                className="text-lg font-semibold text-white"
-              >
-                Kanban-UI
-              </motion.span>
-            </div>
-
-            {/* Navigation Links */}
-            <nav className="flex-1 space-y-2">
-              {navigationLinks.map((link, index) => (
-                <SidebarLink
-                  key={index}
-                  link={link}
-                  className={cn(
-                    "hover:bg-neutral-800 dark:hover:bg-neutral-900 rounded-lg px-2 transition-colors text-white"
-                  )}
-                />
-              ))}
-            </nav>
-
-            {/* User Profile Section */}
-            <div className="mt-auto pt-4 border-t border-neutral-700 dark:border-neutral-900">
-              <div className="flex items-center gap-2 py-2">
-                <div className="w-8 h-8 bg-neutral-800 dark:bg-neutral-900 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
-                    U
-                  </span>
-                </div>
-                <motion.div
-                  animate={{
-                    display: animate ? (open ? "block" : "none") : "block",
-                    opacity: animate ? (open ? 1 : 0) : 1,
-                  }}
-                  className="flex-1"
-                >
-                  <p className="text-sm font-medium text-white">
-                    User Name
-                  </p>
-                  <p className="text-xs text-gray-300">
-                    user@example.com
-                  </p>
-                </motion.div>
-              </div>
-            </div>
-          </div>
+          {renderSidebarContent()}
         </SidebarBody>
       </Sidebar>
-
       {/* Main Content Area */}
       <div className="flex-1 overflow-auto">
-        {children}
+        {renderMainContent()}
       </div>
     </div>
   );
