@@ -1,6 +1,6 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import React from 'react'
+import React, { CSSProperties } from 'react'
 
 interface TaskProps {
     id: string;
@@ -10,16 +10,19 @@ interface TaskProps {
     selected?: boolean;
     onClick?: (e: React.MouseEvent) => void;
     disableDrag?: boolean;
-  }
-export const Task = ({id, title, bg, isPlaceholder = false, selected = false, onClick, disableDrag = false} : TaskProps) => {
+    disableActions?: boolean;
+}
+export const Task = ({id, title, bg, isPlaceholder = false, selected = false, onClick, disableDrag = false, disableActions = false} : TaskProps) => {
     const {attributes, listeners, setNodeRef, transform, transition} = useSortable({id})
 
-    const style = {transition, transform: CSS.Transform.toString(transform), touchAction: 'none'}
+    const sortableStyle: CSSProperties = {transition, transform: CSS.Transform.toString(transform), touchAction: 'none'}
+    const disabledStyle: CSSProperties = disableActions ? { pointerEvents: 'none' as CSSProperties['pointerEvents'], opacity: 0.6 } : {}
+    const style: CSSProperties = { ...sortableStyle, ...disabledStyle }
     if (isPlaceholder) {
       return (
         <div
           className={`border-2 border-dashed ${bg} min-w-[230px] min-h-[50px] rounded-md flex items-center justify-center animate-pulse opacity-70`}
-          style={style}
+          style={sortableStyle}
         >
           {/* Empty skeleton */}
         </div>
@@ -30,10 +33,10 @@ export const Task = ({id, title, bg, isPlaceholder = false, selected = false, on
         ref={setNodeRef} 
         {...(!disableDrag ? attributes : {})}
         {...(!disableDrag ? listeners : {})}
-        style={style} 
+        style={style}
         className={`text-white border-1 border-gray-900 ${bg} min-w-[230px] min-h-[50px] rounded-md flex items-center justify-center shadow-lg ${selected ? 'border-4 border-blue-500' : ''}`}
         key={id}
-        onClick={onClick}
+        onClick={disableActions ? undefined : onClick}
       >
           {title}
       </div>

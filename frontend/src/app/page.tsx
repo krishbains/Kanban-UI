@@ -8,7 +8,7 @@ export default function Home() {
   return (
     <div>
       <Navbar />
-      <SidebarWrapper animate={false}>
+      <SidebarWrapper animate={true}>
         <div>
           <Board />
         </div>

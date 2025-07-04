@@ -15,15 +15,18 @@ type KanbanBoxProps = {
   tasks: Task[];
   columnId: string;
   bg: string;
+  hsva: { h: number; s: number; v: number; a: number };
   onAddTask: (columnId: string) => void;
   onRenameColumn?: (oldId: string, newId: string) => void;
   onDeleteColumn?: (columnId: string) => void;
   onDeleteTasks?: (columnId: string, taskIds: string[]) => void;
   deleteMode: boolean;
   setDeleteMode: (mode: boolean) => void;
+  onChangeColour?: (columnId: string, color: string, hsva?: { h: number; s: number; v: number; a: number }) => void;
+  moveMode?: boolean;
 };
 
-export const KanbanBox = ({tasks, columnId, bg, onAddTask, onRenameColumn, onDeleteColumn, onDeleteTasks, deleteMode, setDeleteMode}: KanbanBoxProps) => {
+export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn, onDeleteColumn, onDeleteTasks, deleteMode, setDeleteMode, onChangeColour, moveMode}: KanbanBoxProps) => {
 
   const { setNodeRef, isOver } = useDroppable({
     id: columnId, // This ID must be unique and match what you'll check in handleDragEnd
@@ -93,7 +96,8 @@ export const KanbanBox = ({tasks, columnId, bg, onAddTask, onRenameColumn, onDel
     <div className='flex justify-center'>
       <div
         ref={setNodeRef}
-        className={` min-w-[272px] min-h-[578px] flex flex-col rounded-md transition-all p-4 ${isOver ? 'bg-slate-700' : bg} shadow-lg`}
+        className={`min-w-[272px] min-h-[578px] flex flex-col rounded-md transition-all p-4 shadow-lg ${isOver ? 'bg-slate-700' : ''} ${bg.startsWith('#') ? '' : bg}`}
+        style={bg.startsWith('#') ? { backgroundColor: bg } : undefined}
       >
         <h2 className="relative flex justify-center items-center mb-6">
           {isEditing ? (
@@ -108,11 +112,12 @@ export const KanbanBox = ({tasks, columnId, bg, onAddTask, onRenameColumn, onDel
               onClick={e => e.stopPropagation()}
               onPointerDown={e => e.stopPropagation()}
               style={{ zIndex: 1 }}
+              disabled={moveMode}
             />
           ) : (
             <span
               className="inline-block px-4 py-1 mr-4 max-w-[calc(100%-3rem)] rounded-full bg-gray-800 text-white font-semibold shadow text-base cursor-pointer truncate text-center"
-              onClick={e => { e.stopPropagation(); handleTitleClick(); }}
+              onClick={e => { if (!moveMode) { e.stopPropagation(); handleTitleClick(); } }}
               onPointerDown={e => e.stopPropagation()}
               title="Click to edit column title"
               style={{ zIndex: 1 }}
@@ -125,10 +130,18 @@ export const KanbanBox = ({tasks, columnId, bg, onAddTask, onRenameColumn, onDel
             </span>
           )}
           <div className="absolute top-0 right-0" style={{ zIndex: 2 }}>
-            <EditButton 
-              onAddTask={() => onAddTask(columnId)} 
-              onDeleteColumn={onDeleteColumn ? () => onDeleteColumn(columnId) : undefined}
-            />
+            <div className={deleteMode || moveMode ? 'opacity-50 cursor-not-allowed' : ''}>
+              <EditButton 
+                onAddTask={() => onAddTask(columnId)} 
+                onDeleteColumn={onDeleteColumn ? () => onDeleteColumn(columnId) : undefined}
+                onColourSelected={(color: string, hsvaValue?: { h: number; s: number; v: number; a: number }) => {
+                  if (onChangeColour) onChangeColour(columnId, color, hsvaValue);
+                }}
+                hsva={hsva}
+                moveMode={moveMode}
+                disabled={deleteMode}
+              />
+            </div>
           </div>
         </h2>
         <div className={`bg-gray-400 -mx-1 mb-5 h-px transition-shadow ${showGlow ? 'bg-white shadow-[0_0_12px_2px_rgba(255,255,255,0.55)]' : ''}`} />
@@ -190,12 +203,17 @@ export const KanbanBox = ({tasks, columnId, bg, onAddTask, onRenameColumn, onDel
         </SortableContext>
         <div onClick={e => e.stopPropagation()}
         onPointerDown={e => e.stopPropagation()} className='flex justify-center items-center mt-5'>
-        <button onClick={() => onAddTask(columnId)} className='hover:shadow-[0_0_12px_4px_rgba(30,144,255,0.7)] bg-green-500 border-1 border-gray-900 rounded-full shadow-[0_0_6px_1px_rgba(255,255,255,0.15)] min-w-[35px] min-h-[35px] p-1 mr-2'>
+        <button 
+          onClick={() => onAddTask(columnId)} 
+          className={`hover:shadow-[0_0_12px_4px_rgba(30,144,255,0.7)] bg-green-500 border-1 border-gray-900 rounded-full shadow-[0_0_6px_1px_rgba(255,255,255,0.15)] min-w-[35px] min-h-[35px] p-1 mr-2 ${moveMode || deleteMode ? 'opacity-50 cursor-not-allowed' : ''}`}
+          disabled={moveMode || deleteMode}
+        >
           ➕
         </button>
         <button 
           onClick={handleDeleteButtonClick}
           className={`hover:shadow-[0_0_12px_4px_rgba(30,144,255,0.7)] border-1 border-gray-900 rounded-full shadow-[0_0_6px_1px_rgba(255,255,255,0.15)] min-w-[35px] min-h-[35px] p-1 ${deleteMode ? 'bg-red-700 text-white' : 'bg-red-500 text-white'}`}
+          disabled={moveMode}
         >
           {deleteMode && selectedTasks.length > 0 ? '🗑️' : '✖️'}
         </button>

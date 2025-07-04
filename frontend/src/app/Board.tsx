@@ -8,6 +8,7 @@ import { useState, useEffect } from "react";
 import { Task } from "@/components/Task";
 import { SortableContext } from "@dnd-kit/sortable";
 import { SortableColumn } from "@/components/SortableColumn";
+import { FloatingMenu } from "@/components/FloatingMenu";
 
 // import Image from "next/image";
 
@@ -19,28 +20,40 @@ type Task = {
 
 type Column = {
   bg: string;
+  hsva: { h: number; s: number; v: number; a: number };
   tasks: Task[];
+};
+
+const defaultHSVA = {
+  'bg-slate-600': { h: 30, s: 60, v: 80, a: 1 },
+  'bg-slate-700': { h: 120, s: 60, v: 80, a: 1 },
+  'bg-slate-900': { h: 270, s: 60, v: 80, a: 1 },
+  'bg-slate-800': { h: 0, s: 0, v: 50, a: 1 },
+  'bg-blue-900': { h: 210, s: 100, v: 56, a: 1 },
 };
 
 const Board = () => {
   const [mounted, setMounted] = useState(false);
   const [activeTask, setActiveTask] = useState<{ id: string; title: string; bg: string } | null>(null);
   const [columns, setColumns] = useState<Record<string, Column>>({
-    todo: { bg: 'bg-slate-800', tasks: [
+    todo: { bg: 'bg-slate-600', hsva: defaultHSVA['bg-slate-600'], tasks: [
       { id: '1', title: 'Buy milk', bg: 'bg-blue-800' },
       { id: '2', title: 'Finish project', bg: 'bg-green-800' },
       { id: '3', title: 'Call mom', bg: 'bg-red-800' },
     ]},
-    inProgress: { bg: 'bg-slate-800', tasks: [
+    inProgress: { bg: 'bg-slate-700', hsva: defaultHSVA['bg-slate-700'], tasks: [
       { id: '4', title: 'Write report', bg: 'bg-yellow-700' },
       { id: '5', title: 'Fix bug', bg: 'bg-pink-700' },
     ]},
-    done: { bg: 'bg-slate-800', tasks: [] },
-    trashed: { bg: 'bg-slate-800', tasks: [] },
+    done: { bg: 'bg-slate-900', hsva: defaultHSVA['bg-slate-900'], tasks: [] },
+    trashed: { bg: 'bg-slate-800', hsva: defaultHSVA['bg-slate-800'], tasks: [] },
   });
 
   // Track delete mode per column
   const [deleteModes, setDeleteModes] = useState<Record<string, boolean>>({});
+
+  // Move mode state
+  const [moveMode, setMoveMode] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -109,7 +122,7 @@ const Board = () => {
     if (!name) return;
     const trimmed = name.trim();
     if (!trimmed || columns[trimmed]) return;
-    setColumns(prev => ({ ...prev, [trimmed]: { bg: 'bg-blue-900', tasks: [] } }));
+    setColumns(prev => ({ ...prev, [trimmed]: { bg: 'bg-blue-900', hsva: defaultHSVA['bg-blue-900'], tasks: [] } }));
   };
 
   const handleAddTask = (columnId: string) => {
@@ -156,55 +169,109 @@ const Board = () => {
     });
   };
 
-  return (
-    <div className="bg-slate-900">
-      <div className="mt-20 flex flex-row overflow-x-auto space-x-4 px-4 pb-4"> 
-        <DndContext
-          onDragStart={e => {
-            handleDragStart(e);
-            // handleColumnDragStart();
-          }}
-          onDragEnd={e => {
-            handleDragEnd(e);
-            // handleColumnDragEnd(e);
-          }}
-          onDragCancel={handleDragCancel}
-          collisionDetection={closestCorners}
-          sensors={sensors}
-        >
-          <SortableContext items={Object.keys(columns)}>
-            {Object.entries(columns).map(([columnId, column]) => (
-              <SortableColumn key={columnId} id={columnId} disableDrag={!!deleteModes[columnId]}>
-                <KanbanBox 
-                  tasks={column.tasks} 
-                  columnId={columnId} 
-                  bg={column.bg} 
-                  onAddTask={handleAddTask}
-                  onRenameColumn={undefined}
-                  onDeleteColumn={handleRemoveColumn}
-                  onDeleteTasks={handleDeleteTasks}
-                  deleteMode={!!deleteModes[columnId]}
-                  setDeleteMode={(mode: boolean) => handleSetDeleteMode(columnId, mode)}
-                />
-              </SortableColumn>
-            ))}
-          </SortableContext>
-          <div className="flex items-center mb-4 px-4">
-            <button
-              onClick={handleAddColumn}
-              className="bg-gray-900 text-white font-bold py-2 px-4 rounded shadow shadow-[0_0_6px_2px_rgba(255,255,255,0.2)] hover:shadow-[0_0_12px_4px_rgba(30,144,255,0.7)]">
-              +
-            </button>
-          </div>
-          <DragOverlay>
-            {activeTask ? (
-              <Task id={activeTask.id} title={activeTask.title} bg={activeTask.bg} />
-            ) : null}
-          </DragOverlay>
-        </DndContext> 
+  const handleChangeColumnColour = (columnId: string, color: string, hsva?: { h: number; s: number; v: number; a: number }) => {
+    setColumns(prev => {
+      const prevBg = prev[columnId]?.bg;
+      if (!prevBg) return prev;
+      console.log(`changed ${columnId}'s bg from ${prevBg} to ${color}`);
+      return {
+        ...prev,
+        [columnId]: {
+          ...prev[columnId],
+          bg: color,
+          hsva: hsva || prev[columnId].hsva,
+        },
+      };
+    });
+  };
 
+  return (
+    <div className="bg-slate-900 relative">
+      <div className="mt-20 flex flex-row overflow-x-auto space-x-4 px-4 pb-4"> 
+        {moveMode ? (
+          <DndContext
+            onDragStart={e => {
+              handleDragStart(e);
+            }}
+            onDragEnd={e => {
+              handleDragEnd(e);
+            }}
+            onDragCancel={handleDragCancel}
+            collisionDetection={closestCorners}
+            sensors={sensors}
+          >
+            <SortableContext items={Object.keys(columns)}>
+              {Object.entries(columns).map(([columnId, column]) => (
+                <SortableColumn key={columnId} id={columnId} disableDrag={!!deleteModes[columnId]}>
+                  <KanbanBox 
+                    tasks={column.tasks} 
+                    columnId={columnId} 
+                    bg={column.bg} 
+                    hsva={column.hsva}
+                    onAddTask={handleAddTask}
+                    onRenameColumn={undefined}
+                    onDeleteColumn={handleRemoveColumn}
+                    onDeleteTasks={handleDeleteTasks}
+                    deleteMode={!!deleteModes[columnId]}
+                    setDeleteMode={(mode: boolean) => handleSetDeleteMode(columnId, mode)}
+                    onChangeColour={handleChangeColumnColour}
+                    moveMode={moveMode}
+                  />
+                </SortableColumn>
+              ))}
+            </SortableContext>
+            <div className="flex items-center mb-4 px-4">
+              <button
+                onClick={handleAddColumn}
+                className="bg-gray-900 text-white font-bold py-2 px-4 rounded shadow shadow-[0_0_6px_2px_rgba(255,255,255,0.2)] hover:shadow-[0_0_12px_4px_rgba(30,144,255,0.7)]"
+                disabled={moveMode}
+              >
+                +
+              </button>
+            </div>
+            <DragOverlay>
+              {activeTask ? (
+                <Task id={activeTask.id} title={activeTask.title} bg={activeTask.bg} />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <>
+            <SortableContext items={Object.keys(columns)}>
+              {Object.entries(columns).map(([columnId, column]) => (
+                <SortableColumn key={columnId} id={columnId} disableDrag={true}>
+                  <KanbanBox 
+                    tasks={column.tasks} 
+                    columnId={columnId} 
+                    bg={column.bg} 
+                    hsva={column.hsva}
+                    onAddTask={handleAddTask}
+                    onRenameColumn={undefined}
+                    onDeleteColumn={handleRemoveColumn}
+                    onDeleteTasks={handleDeleteTasks}
+                    deleteMode={!!deleteModes[columnId]}
+                    setDeleteMode={(mode: boolean) => handleSetDeleteMode(columnId, mode)}
+                    onChangeColour={handleChangeColumnColour}
+                    moveMode={moveMode}
+                  />
+                </SortableColumn>
+              ))}
+            </SortableContext>
+            <div className="flex items-center mb-4 px-4">
+              <button
+                onClick={handleAddColumn}
+                className="bg-gray-900 text-white font-bold py-2 px-4 rounded shadow shadow-[0_0_6px_2px_rgba(255,255,255,0.2)] hover:shadow-[0_0_12px_4px_rgba(30,144,255,0.7)]"
+                disabled={moveMode}
+              >
+                +
+              </button>
+            </div>
+          </>
+        )}
       </div>
-      
+      <div className="absolute left-1/2 -translate-x-1/2 top-120 z-50 pointer-events-none">
+        <FloatingMenu moveMode={moveMode} setMoveMode={setMoveMode} />
+      </div>
     </div>
   );
 }
