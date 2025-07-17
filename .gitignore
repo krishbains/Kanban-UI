@@ -53,3 +53,6 @@ next-env.d.ts
 /frontend/build/
 /frontend/coverage/
 /frontend/.env*
+
+# Local Netlify folder
+.netlify

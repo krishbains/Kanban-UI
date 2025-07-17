@@ -18,11 +18,12 @@ interface TaskProps {
     taskId?: string;
     colorMode?: boolean;
     ref?: React.Ref<HTMLDivElement>;
+    moveMode?: boolean;
 }
-export const Task = React.forwardRef<HTMLDivElement, TaskProps>(({id, title, bg, isPlaceholder = false, selected = false, onClick, disableDrag = false, disableActions = false, isEditing = false, onRenameTask, onSetTaskEditing, columnId, taskId, colorMode = false}, ref) => {
+export const Task = React.forwardRef<HTMLDivElement, TaskProps>(({id, title, bg, isPlaceholder = false, selected = false, onClick, disableDrag = false, disableActions = false, isEditing = false, onRenameTask, onSetTaskEditing, columnId, taskId, colorMode = false, moveMode = false}, ref) => {
     const {attributes, listeners, setNodeRef, transform, transition} = useSortable({id})
 
-    const sortableStyle: CSSProperties = {transition, transform: CSS.Transform.toString(transform), touchAction: 'none'}
+    const sortableStyle: CSSProperties = {transition, transform: CSS.Transform.toString(transform), touchAction: moveMode ? 'none' : 'auto'}
     const disabledStyle: CSSProperties = disableActions ? { pointerEvents: 'none' as CSSProperties['pointerEvents'], opacity: 0.6 } : {}
     const style: CSSProperties = { ...sortableStyle, ...disabledStyle }
     const textareaRef = React.useRef<HTMLTextAreaElement>(null);

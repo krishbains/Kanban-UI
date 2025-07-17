@@ -215,7 +215,7 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
                   items.splice(insertAt, 0, { id: '__skeleton__', title: '', bg: '', isEditing: false });
                   return items.map((task) =>
                     task.id === '__skeleton__' ? (
-                      <Task key="__skeleton__" id="__skeleton__" title="" bg="" isPlaceholder isEditing={false}/>
+                      <Task key="__skeleton__" id="__skeleton__" title="" bg="" isPlaceholder isEditing={false} moveMode={moveMode}/>
                     ) : (
                       <Task 
                         key={`${columnId}-${task.id}`} 
@@ -232,6 +232,7 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
                         taskId={task.id}
                         colorMode={colorMode}
                         data-task-box
+                        moveMode={moveMode}
                       />
                     )
                   );
@@ -265,6 +266,7 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
                     taskId={task.id}
                     colorMode={colorMode}
                     ref={taskRef}
+                    moveMode={moveMode}
                   />
                 );
               });

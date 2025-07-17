@@ -593,6 +593,7 @@ const Board = ({ columns: columnsProp, onSchemaChange, isMobile = false }: Board
                 id={column.id}
                 disableDrag={!moveMode || !!deleteModes[column.id]}
                 className={isMobile ? 'kanban-column-mobile' : ''}
+                moveMode={moveMode}
               >
                 <KanbanBox
                   tasks={column.tasks || []}

@@ -1,7 +1,7 @@
 [build]
   base = "frontend"
   command = "npm run build"
-  publish = ""
+  publish = ".next"
 
 [functions]
-  directory = "netlify/functions" 
+  directory = "netlify/functions"
