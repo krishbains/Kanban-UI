@@ -1,7 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import React, { useState, createContext, useContext, useEffect } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion } from "framer-motion";
 import { IconMenu2, IconX, IconTrash } from "@tabler/icons-react";
 import Board from "@/app/Board";
 import { Column } from "@/app/Board";
