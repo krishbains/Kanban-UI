@@ -37,12 +37,33 @@ const FloatingDockMobile = ({
 }) => {
   const [open, setOpen] = useState(false);
   return (
-    <div className={cn("relative block md:hidden", className)}>
-      <AnimatePresence>
+    <motion.div
+      className={cn("relative flex flex-row items-center gap-2 md:hidden", className)}
+      layout
+      initial={false}
+      animate={{
+        marginLeft: open ? 0 : 0,
+      }}
+      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+    >
+      <motion.button
+        onClick={() => setOpen(!open)}
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 dark:bg-neutral-800"
+        style={{ transform: 'rotate(90deg)' }}
+        layout
+        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      >
+        <IconLayoutNavbarCollapse className="h-5 w-5 text-neutral-500 dark:text-neutral-400" />
+      </motion.button>
+      <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            layoutId="nav"
-            className="absolute inset-x-0 bottom-full mb-2 flex flex-col gap-2"
+            layout
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="flex flex-row gap-2 justify-center"
           >
             {items.map((item, idx) => (
               <motion.div
@@ -76,13 +97,7 @@ const FloatingDockMobile = ({
           </motion.div>
         )}
       </AnimatePresence>
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 dark:bg-neutral-800"
-      >
-        <IconLayoutNavbarCollapse className="h-5 w-5 text-neutral-500 dark:text-neutral-400" />
-      </button>
-    </div>
+    </motion.div>
   );
 };
 

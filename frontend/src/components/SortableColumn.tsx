@@ -6,9 +6,10 @@ interface SortableColumnProps {
   id: string;
   children: React.ReactNode;
   disableDrag?: boolean;
+  className?: string;
 }
 
-export const SortableColumn = ({ id, children, disableDrag = false }: SortableColumnProps) => {
+export const SortableColumn = ({ id, children, disableDrag = false, className }: SortableColumnProps) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
   const style = {
     transition,
@@ -16,7 +17,7 @@ export const SortableColumn = ({ id, children, disableDrag = false }: SortableCo
     touchAction: 'none',
   };
   return (
-    <div ref={setNodeRef} {...(!disableDrag ? attributes : {})} {...(!disableDrag ? listeners : {})} style={style} className="flex-shrink-0">
+    <div ref={setNodeRef} {...(!disableDrag ? attributes : {})} {...(!disableDrag ? listeners : {})} style={style} className={`flex-shrink-0 ${className || ''}`}>
       {children}
     </div>
   );

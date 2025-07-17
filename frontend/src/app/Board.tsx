@@ -4,7 +4,7 @@ import { KanbanBox } from "@/components/KanbanBox";
 import { closestCorners, DndContext, PointerSensor, TouchSensor, useSensor, useSensors, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import type { DragEndEvent } from '@dnd-kit/core';
 import { arrayMove } from "@dnd-kit/sortable";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Task } from "@/components/Task";
 import { SortableContext } from "@dnd-kit/sortable";
 import { SortableColumn } from "@/components/SortableColumn";
@@ -77,9 +77,11 @@ const defaultColumns: Column[] = [
 // Add columns prop to Board
 interface BoardProps {
   columns?: Column[];
+  onSchemaChange?: (schema: Column[]) => void;
+  isMobile?: boolean;
 }
 
-const Board = ({ columns: columnsProp }: BoardProps) => {
+const Board = ({ columns: columnsProp, onSchemaChange, isMobile = false }: BoardProps) => {
   const [activeTask, setActiveTask] = useState<{ id: string; title: string; bg: string } | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const [columns, setColumns] = useState<Column[]>(columnsProp || defaultColumns);
@@ -91,10 +93,124 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
   const [colorMode, setColorMode] = useState(false);
   // Track which ColourWheel is open: { type: 'task'|'column', columnId, taskId? }
   const [colourWheelTarget, setColourWheelTarget] = useState<null | { type: 'task'|'column', columnId: string, taskId?: string, anchorRect: DOMRect }>(null);
+  // Zoom state
+  const [zoom, setZoom] = useState(1);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [zoomCenter, setZoomCenter] = useState({ x: 0, y: 0 });
+  const boardRef = useRef<HTMLDivElement>(null);
+  const boardContentRef = useRef<HTMLDivElement>(null);
+  const lastNotifiedSchema = useRef<string>('');
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(TouchSensor),
   );
+
+  // Zoom constants
+  const MIN_ZOOM = 0.2;
+  const MAX_ZOOM = 2;
+  const ZOOM_STEP = 0.1;
+
+  // Calculate zoom center based on mouse position
+  const calculateZoomCenter = useCallback((event: MouseEvent | WheelEvent) => {
+    if (!boardContentRef.current) return { x: 0, y: 0 };
+    
+    const rect = boardContentRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    
+    return { x, y };
+  }, []);
+
+  // Zoom handlers with mouse center
+  const zoomIn = useCallback((center?: { x: number; y: number }) => {
+    setZoom(prev => {
+      const newZoom = Math.min(prev + ZOOM_STEP, MAX_ZOOM);
+      setZoomLevel(Math.round(newZoom * 100));
+      if (center) {
+        setZoomCenter(center);
+      }
+      return newZoom;
+    });
+  }, []);
+
+  const zoomOut = useCallback((center?: { x: number; y: number }) => {
+    setZoom(prev => {
+      const newZoom = Math.max(prev - ZOOM_STEP, MIN_ZOOM);
+      setZoomLevel(Math.round(newZoom * 100));
+      if (center) {
+        setZoomCenter(center);
+      }
+      return newZoom;
+    });
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    setZoom(1);
+    setZoomLevel(100);
+    setZoomCenter({ x: 0, y: 0 });
+  }, []);
+
+  // Keyboard shortcuts for zoom
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if target is not an input or textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === '=') {
+        e.preventDefault();
+        // For keyboard shortcuts, zoom to center of viewport
+        const center = { x: 50, y: 50 };
+        zoomIn(center);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+        e.preventDefault();
+        const center = { x: 50, y: 50 };
+        zoomOut(center);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        resetZoom();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [zoomIn, zoomOut, resetZoom]);
+
+  // Mouse wheel zoom
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      // Check if target is not an input or textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      // Only zoom if Ctrl/Cmd is pressed
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const center = calculateZoomCenter(e);
+        if (e.deltaY < 0) {
+          // Zoom in - check if we're not at max zoom
+          if (zoom < MAX_ZOOM) {
+            zoomIn(center);
+          }
+        } else {
+          // Zoom out - check if we're not at min zoom
+          if (zoom > MIN_ZOOM) {
+            zoomOut(center);
+          }
+        }
+      }
+    };
+
+    const boardElement = boardRef.current;
+    if (boardElement) {
+      boardElement.addEventListener('wheel', handleWheel, { passive: false });
+      return () => boardElement.removeEventListener('wheel', handleWheel);
+    }
+  }, [zoomIn, zoomOut, calculateZoomCenter, zoom]);
 
   useEffect(() => {
     if (newColumnId) {
@@ -113,6 +229,17 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
       setColumns(defaultColumns);
     }
   }, [columnsProp]);
+
+  // Notify parent component when schema changes
+  useEffect(() => {
+    if (onSchemaChange && columns && columns.length > 0) {
+      const schemaString = JSON.stringify(columns);
+      if (schemaString !== lastNotifiedSchema.current) {
+        lastNotifiedSchema.current = schemaString;
+        onSchemaChange(columns);
+      }
+    }
+  }, [columns, onSchemaChange]);
 
   // Helper: get column by id
   const getColumn = (id: string) => columns.find(col => col.id === id);
@@ -151,6 +278,7 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
       const newIndex = columns.findIndex(col => col.id === over.id);
       if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
         setColumns(arrayMove(columns, oldIndex, newIndex));
+        // console.log('Document Schema (Column Reorder):', JSON.stringify(columns, null, 2));
       }
       return; // Don't run the rest of the handler for column drags
     }
@@ -170,9 +298,13 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
       const overIndex = toCol.tasks.findIndex((task: Task) => task.id === overId);
       if (overIndex === -1) return;
       const updatedTasks = arrayMove(toCol.tasks, activeTaskIndex, overIndex);
-      setColumns(prev => prev.map((col, idx) =>
-        idx === fromColIdx ? { ...col, tasks: updatedTasks } : col
-      ));
+      setColumns(prev => {
+        const newColumns = prev.map((col, idx) =>
+          idx === fromColIdx ? { ...col, tasks: updatedTasks } : col
+        );
+        // console.log('Document Schema (Task Reorder):', JSON.stringify(newColumns, null, 2));
+        return newColumns;
+      });
     } else {
       const overIndex = toCol.tasks.findIndex((task: Task) => task.id === overId);
       setColumns(prev => {
@@ -212,11 +344,13 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
         } else {
           newTo.splice(insertAt, 0, movingTask);
         }
-        return prev.map((col, idx) => {
+        const newColumns = prev.map((col, idx) => {
           if (idx === fromColIdx) return { ...col, tasks: newFrom };
           if (idx === toColIdx) return { ...col, tasks: newTo };
           return col;
         });
+        // console.log('Document Schema (Task Move):', JSON.stringify(newColumns, null, 2));
+        return newColumns;
       });
     }
     setActiveColumnId(null);
@@ -236,16 +370,20 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
     if (!trimmed) return;
     // Generate unique id
     const newId = Date.now().toString();
-    setColumns(prev => ([
-      ...prev,
-      {
-        id: newId,
-        title: trimmed,
-        bg: 'bg-blue-900',
-        hsva: defaultHSVA['bg-blue-900'],
-        tasks: [],
-      },
-    ]));
+    setColumns(prev => {
+      const newColumns = [
+        ...prev,
+        {
+          id: newId,
+          title: trimmed,
+          bg: 'bg-blue-900',
+          hsva: defaultHSVA['bg-blue-900'],
+          tasks: [],
+        },
+      ];
+      // console.log('Document Schema (Add Column):', JSON.stringify(newColumns, null, 2));
+      return newColumns;
+    });
     setNewColumnId(newId);
     // Optionally, immediately trigger rename handler for consistency
     handleRenameColumn(newId, trimmed);
@@ -258,15 +396,23 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
       bg: 'bg-blue-800',
       isEditing: true,
     };
-    setColumns(prev => prev.map(col =>
-      col.id === columnId ? { ...col, tasks: [...col.tasks, newTask] } : col
-    ));
+    setColumns(prev => {
+      const newColumns = prev.map(col =>
+        col.id === columnId ? { ...col, tasks: [...col.tasks, newTask] } : col
+      );
+      // console.log('Document Schema (Add Task):', JSON.stringify(newColumns, null, 2));
+      return newColumns;
+    });
   };
 
   const handleDeleteTasks = (columnId: string, taskIds: string[]) => {
-    setColumns(prev => prev.map(col =>
-      col.id === columnId ? { ...col, tasks: col.tasks.filter(task => !taskIds.includes(task.id)) } : col
-    ));
+    setColumns(prev => {
+      const newColumns = prev.map(col =>
+        col.id === columnId ? { ...col, tasks: col.tasks.filter(task => !taskIds.includes(task.id)) } : col
+      );
+      // console.log('Document Schema (Delete Tasks):', JSON.stringify(newColumns, null, 2));
+      return newColumns;
+    });
     setDeleteModes(prev => ({ ...prev, [columnId]: false }));
   };
 
@@ -275,41 +421,61 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
   };
 
   const handleRemoveColumn = (columnId: string) => {
-    setColumns(prev => prev.filter(col => col.id !== columnId));
+    setColumns(prev => {
+      const newColumns = prev.filter(col => col.id !== columnId);
+      // console.log('Document Schema (Remove Column):', JSON.stringify(newColumns, null, 2));
+      return newColumns;
+    });
   };
 
   const handleChangeColumnColour = (columnId: string, color: string, hsva?: { h: number; s: number; v: number; a: number }) => {
-    setColumns(prev => prev.map(col =>
-      col.id === columnId ? { ...col, bg: color, hsva: hsva || col.hsva } : col
-    ));
+    setColumns(prev => {
+      const newColumns = prev.map(col =>
+        col.id === columnId ? { ...col, bg: color, hsva: hsva || col.hsva } : col
+      );
+      // console.log('Document Schema (Change Column Colour):', JSON.stringify(newColumns, null, 2));
+      return newColumns;
+    });
   };
 
   const handleRenameColumn = (oldId: string, newTitle: string) => {
-    setColumns(prev => prev.map(col =>
-      col.id === oldId ? { ...col, title: newTitle } : col
-    ));
+    setColumns(prev => {
+      const newColumns = prev.map(col =>
+        col.id === oldId ? { ...col, title: newTitle } : col
+      );
+      // console.log('Document Schema (Rename Column):', JSON.stringify(newColumns, null, 2));
+      return newColumns;
+    });
   };
 
   const handleRenameTask = (columnId: string, taskId: string, newTitle: string) => {
-    setColumns(prev => prev.map(col =>
-      col.id === columnId ? {
-        ...col,
-        tasks: col.tasks.map(task =>
-          task.id === taskId ? { ...task, title: newTitle, isEditing: false } : task
-        )
-      } : col
-    ));
+    setColumns(prev => {
+      const newColumns = prev.map(col =>
+        col.id === columnId ? {
+          ...col,
+          tasks: col.tasks.map(task =>
+            task.id === taskId ? { ...task, title: newTitle, isEditing: false } : task
+          )
+        } : col
+      );
+      // console.log('Document Schema (Rename Task):', JSON.stringify(newColumns, null, 2));
+      return newColumns;
+    });
   };
 
   const handleSetTaskEditing = (columnId: string, taskId: string, editing: boolean) => {
-    setColumns(prev => prev.map(col =>
-      col.id === columnId ? {
-        ...col,
-        tasks: col.tasks.map(task =>
-          task.id === taskId ? { ...task, isEditing: editing } : task
-        )
-      } : col
-    ));
+    setColumns(prev => {
+      const newColumns = prev.map(col =>
+        col.id === columnId ? {
+          ...col,
+          tasks: col.tasks.map(task =>
+            task.id === taskId ? { ...task, isEditing: editing } : task
+          )
+        } : col
+      );
+      // console.log('Document Schema (Set Task Editing):', JSON.stringify(newColumns, null, 2));
+      return newColumns;
+    });
   };
 
   // Helper to close ColourWheel on outside click
@@ -341,24 +507,78 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
   const handleColourPick = (hex: string, hsva: { h: number; s: number; v: number; a: number }) => {
     if (!colourWheelTarget) return;
     if (colourWheelTarget.type === 'task' && colourWheelTarget.taskId) {
-      setColumns(prev => prev.map(col =>
-        col.id === colourWheelTarget.columnId ? {
-          ...col,
-          tasks: col.tasks.map(task =>
-            task.id === colourWheelTarget.taskId ? { ...task, bg: hex } : task
-          )
-        } : col
-      ));
+      setColumns(prev => {
+        const newColumns = prev.map(col =>
+          col.id === colourWheelTarget.columnId ? {
+            ...col,
+            tasks: col.tasks.map(task =>
+              task.id === colourWheelTarget.taskId ? { ...task, bg: hex } : task
+            )
+          } : col
+        );
+        // console.log('Document Schema (Change Task Colour):', JSON.stringify(newColumns, null, 2));
+        return newColumns;
+      });
     } else if (colourWheelTarget.type === 'column') {
-      setColumns(prev => prev.map(col =>
-        col.id === colourWheelTarget.columnId ? { ...col, bg: hex, hsva } : col
-      ));
+      setColumns(prev => {
+        const newColumns = prev.map(col =>
+          col.id === colourWheelTarget.columnId ? { ...col, bg: hex, hsva } : col
+        );
+        // console.log('Document Schema (Change Column Colour via Wheel):', JSON.stringify(newColumns, null, 2));
+        return newColumns;
+      });
     }
   };
 
   return (
-    <div className="bg-slate-900 relative">
-      <div className="mt-20 flex flex-row overflow-x-auto space-x-4 px-4 pb-4">
+    <div className="bg-slate-900 relative h-full overflow-hidden" ref={boardRef}>
+      {/* Zoom Controls */}
+      <div className="absolute top-4 right-4 z-50 flex flex-col gap-2">
+        <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-2 shadow-lg">
+        <button
+          onClick={() => zoomOut({ x: 50, y: 50 })}
+          className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-1 px-2 rounded text-sm transition-colors"
+          disabled={zoom <= MIN_ZOOM}
+          title="Zoom Out (Ctrl/Cmd + -)"
+        >
+          -
+        </button>
+        <span className="text-white text-sm font-medium min-w-[3rem] text-center">
+          {zoomLevel}%
+        </span>
+        <button
+          onClick={() => zoomIn({ x: 50, y: 50 })}
+          className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-1 px-2 rounded text-sm transition-colors"
+          disabled={zoom >= MAX_ZOOM}
+          title="Zoom In (Ctrl/Cmd + =)"
+        >
+          +
+        </button>
+        <button
+          onClick={resetZoom}
+          className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-1 px-2 rounded text-sm transition-colors"
+          disabled={zoom === 1}
+          title="Reset Zoom (Ctrl/Cmd + 0)"
+        >
+          Reset
+        </button>
+        </div>
+        <div className="text-xs text-slate-400 bg-slate-800 rounded px-2 py-1 text-center">
+          Ctrl/Cmd + Scroll to zoom (mouse-centered)
+        </div>
+      </div>
+      
+      {/* Scrollable container that contains the zoomed content */}
+      <div className="mt-20 h-[calc(100vh-5rem)] overflow-auto">
+        <div
+          className={`flex flex-row space-x-4 px-4 pb-4 min-w-max ${isMobile ? 'kanban-board-mobile' : ''}`}
+          ref={boardContentRef}
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: `${zoomCenter.x}% ${zoomCenter.y}%`,
+            transition: 'transform 0.1s ease-out'
+          }}
+        >
         <DndContext
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
@@ -368,9 +588,14 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
         >
           <SortableContext items={columns.map(col => col.id)}>
             {columns.map((column) => (
-              <SortableColumn key={column.id} id={column.id} disableDrag={!moveMode || !!deleteModes[column.id]}>
+              <SortableColumn
+                key={column.id}
+                id={column.id}
+                disableDrag={!moveMode || !!deleteModes[column.id]}
+                className={isMobile ? 'kanban-column-mobile' : ''}
+              >
                 <KanbanBox
-                  tasks={column.tasks}
+                  tasks={column.tasks || []}
                   columnId={column.id}
                   bg={column.bg}
                   hsva={column.hsva}
@@ -401,36 +626,44 @@ const Board = ({ columns: columnsProp }: BoardProps) => {
               +
             </button>
           </div>
-          <DragOverlay>
-            {activeTask ? (
-              <Task id={activeTask.id} title={activeTask.title} bg={activeTask.bg} />
-            ) : activeColumnId ? (
-              (() => {
-                const col = columns.find(c => c.id === activeColumnId);
-                if (!col) return null;
-                return (
-                  <KanbanBox
-                    tasks={col.tasks}
-                    columnId={col.id}
-                    bg={col.bg}
-                    hsva={col.hsva}
-                    onAddTask={() => {}}
-                    onRenameColumn={() => {}}
-                    onDeleteColumn={() => {}}
-                    onDeleteTasks={() => {}}
-                    deleteMode={false}
-                    setDeleteMode={() => {}}
-                    onChangeColour={() => {}}
-                    moveMode={false}
-                    columnTitle={col.title}
-                    autoFocusTitle={false}
-                  />
-                );
-              })()
-            ) : null}
-          </DragOverlay>
         </DndContext>
+        </div>
       </div>
+      
+      {/* DragOverlay - positioned outside zoomed container to avoid coordinate issues */}
+      <DragOverlay>
+        {activeTask ? (
+          <div style={{ transform: `scale(${zoom})` }}>
+            <Task id={activeTask.id} title={activeTask.title} bg={activeTask.bg} />
+          </div>
+        ) : activeColumnId ? (
+          (() => {
+            const col = columns.find(c => c.id === activeColumnId);
+            if (!col) return null;
+            return (
+              <div style={{ transform: `scale(${zoom})` }}>
+                <KanbanBox
+                  tasks={col.tasks}
+                  columnId={col.id}
+                  bg={col.bg}
+                  hsva={col.hsva}
+                  onAddTask={() => {}}
+                  onRenameColumn={() => {}}
+                  onDeleteColumn={() => {}}
+                  onDeleteTasks={() => {}}
+                  deleteMode={false}
+                  setDeleteMode={() => {}}
+                  onChangeColour={() => {}}
+                  moveMode={false}
+                  columnTitle={col.title}
+                  autoFocusTitle={false}
+                />
+              </div>
+            );
+          })()
+        ) : null}
+      </DragOverlay>
+      
       {/* ColourWheel Popover */}
       {colourWheelTarget && (
         <div

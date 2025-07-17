@@ -26,6 +26,14 @@ export const Task = React.forwardRef<HTMLDivElement, TaskProps>(({id, title, bg,
     const disabledStyle: CSSProperties = disableActions ? { pointerEvents: 'none' as CSSProperties['pointerEvents'], opacity: 0.6 } : {}
     const style: CSSProperties = { ...sortableStyle, ...disabledStyle }
     const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+    const [editValue, setEditValue] = React.useState(title);
+    
+    // Update editValue when title changes
+    React.useEffect(() => {
+      setEditValue(title);
+    }, [title]);
+
+    // Handle editing focus and auto-resize
     React.useEffect(() => {
       if (isEditing && textareaRef.current && !colorMode) {
         textareaRef.current.focus();
@@ -35,10 +43,6 @@ export const Task = React.forwardRef<HTMLDivElement, TaskProps>(({id, title, bg,
         textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
       }
     }, [isEditing, colorMode]);
-    const [editValue, setEditValue] = React.useState(title);
-    React.useEffect(() => {
-      setEditValue(title);
-    }, [title]);
 
     // Auto-resize textarea when content changes
     React.useEffect(() => {

@@ -7,7 +7,11 @@ module.exports = {
   ],
   darkMode: "class", // Enable dark mode via .dark class
   theme: {
-    extend: {},
+    extend: {
+      screens: {
+        'iphone14': '390px',
+      },
+    },
   },
   plugins: [],
 }

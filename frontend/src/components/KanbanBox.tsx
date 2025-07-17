@@ -172,7 +172,7 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
         </h2>
         <div className={`bg-gray-400 -mx-1 mb-5 h-px transition-shadow ${showGlow ? 'bg-white shadow-[0_0_12px_2px_rgba(255,255,255,0.55)]' : ''}`} />
         <SortableContext
-          items={tasks.map(task => `${columnId}-${task.id}`)}
+          items={(tasks || []).map(task => `${columnId}-${task.id}`)}
           strategy={verticalListSortingStrategy}
         >
           <div className="flex flex-col space-y-4">
@@ -183,11 +183,11 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
                 // Only show skeleton in this column if overId belongs to this column
                 const [overCol] = overId.split('-');
                 if (overCol === columnId) {
-                  const overIndex = tasks.findIndex(task => `${columnId}-${task.id}` === overId);
-                  let insertAt = overIndex === -1 ? tasks.length : overIndex;
+                  const overIndex = (tasks || []).findIndex(task => `${columnId}-${task.id}` === overId);
+                  let insertAt = overIndex === -1 ? (tasks || []).length : overIndex;
                   // Precise drop-at-end logic for skeleton
-                  if (overIndex !== -1 && tasks.length > 0) {
-                    const lastTask = tasks[tasks.length - 1];
+                  if (overIndex !== -1 && (tasks || []).length > 0) {
+                    const lastTask = (tasks || [])[(tasks || []).length - 1];
                     const lastTaskId = `${columnId}-${lastTask.id}`;
                     // Use window.event to get pointer position
                     let pointerY = 0;
@@ -206,12 +206,12 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
                         const lastMidY = lastRect.top + lastRect.height / 2;
                         if (pointerY > lastMidY) {
                           // Show skeleton at end
-                          insertAt = tasks.length;
+                          insertAt = (tasks || []).length;
                         }
                       }
                     }
                   }
-                  const items = [...tasks];
+                  const items = [...(tasks || [])];
                   items.splice(insertAt, 0, { id: '__skeleton__', title: '', bg: '', isEditing: false });
                   return items.map((task) =>
                     task.id === '__skeleton__' ? (
@@ -238,7 +238,7 @@ export const KanbanBox = ({tasks, columnId, bg, hsva, onAddTask, onRenameColumn,
                 }
               }
               // Default: just render tasks
-              return tasks.map(task => {
+              return (tasks || []).map(task => {
                 const scopedId = `${columnId}-${task.id}`;
                 if (active && active.id === scopedId) {
                   // Hide the original while dragging
