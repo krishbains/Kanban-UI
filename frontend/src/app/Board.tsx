@@ -689,7 +689,7 @@ const Board = ({ columns: columnsProp, onSchemaChange, isMobile = false }: Board
           />
         </div>
       )}
-      <div className="absolute left-1/2 -translate-x-1/2 top-120 z-50 pointer-events-none">
+      <div className="absolute left-1/2 -translate-x-1/2 top-160 z-50 pointer-events-none">
         <FloatingMenu moveMode={moveMode} setMoveMode={setMoveMode} colorMode={colorMode} setColorMode={handleSetColorMode} />
       </div>
     </div>
