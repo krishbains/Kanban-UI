@@ -1,12 +1,8 @@
 [build]
-  base = "frontend"
+  base = "/"
   command = "npm run build"
   publish = ".next"
 
 [functions]
   directory = "netlify/functions"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
