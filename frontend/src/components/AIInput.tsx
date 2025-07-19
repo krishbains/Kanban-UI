@@ -51,7 +51,17 @@ export default function AIInput({ onJsonResult, onCancel }: AIInputProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: HARDCODED_PROMPT, userInput: input }),
       });
-      if (!res.ok) throw new Error('API error');
+      if (!res.ok) {
+        let errorDetails = '';
+        try {
+          // Try to get more info from the response body
+          const text = await res.text();
+          errorDetails = text ? ` | Response: ${text}` : '';
+        } catch {
+          // Ignore if reading body fails
+        }
+        throw new Error(`API error: ${res.status} ${res.statusText}${errorDetails}`);
+      }
       const data = await res.json();
       if (!data || !data.result) throw new Error('No result from LLM');
       const rawResult = typeof data.result === 'string' ? data.result : JSON.stringify(data.result);
