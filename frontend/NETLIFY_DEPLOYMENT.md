@@ -82,6 +82,7 @@ npm install @netlify/next
 cd frontend
 netlify init   # Link to your Netlify site
 netlify deploy --build
+netlify deploy --prod
 ```
 
 ---

@@ -6,26 +6,20 @@ interface AIInputProps {
 }
 
 const HARDCODED_PROMPT = `
-You are an expert template generator. Follow these rules:
-- Output must be a single JSON array, not an object.
-- The array should contain column objects, each with this structure:
-  {
-    "id": string,
-    "title": string,
-    "bg": string,
-    "hsva": { "h": number, "s": number, "v": number, "a": number },
-    "tasks": [ { "id": string, "title": string, "bg": string } ]
-  }
-- CRITICAL: ID naming convention for drag-and-drop functionality:
-  * Column IDs must be simple strings without hyphens (e.g., "col1", "todo", "doing", "done")
-  * Task IDs must follow the pattern: "{columnId}-{taskNumber}" (e.g., "col1-1", "todo-1", "doing-2")
-  * This format is required for the drag-and-drop system to work properly
-- Do not wrap the array in an object or add any extra properties.
-- Do not omit any of the required keys (id, title, bg, hsva, tasks) in any column.
+You are an expert template generator. Output a single JSON array of columns, each with:
+- id: string (no hyphens)
+- title: string
+- bg: string (column background color, suitable and distinct)
+- hsva: { h: number, s: number, v: number, a: number }
+- tasks: array of { id: string (format: {columnId}-{taskNumber}), title: string, bg: string (task background color, different from column and suitable for white text) }
+Rules:
+- Do not wrap the array in an object or add extra properties.
+- Do not omit any required keys.
 - Only output valid JSON, no explanations or extra text.
 - The output must start with '[' and end with ']'.
-- Use the user's instruction to fill in the template details.
-- Do not invent fields not described in the rules.
+- Use the user's instruction for template details.
+- For colors: Each column should have a suitable, distinct color. Each task's bg must be different from its parent column's bg and must not blend with white text or the column's bg.
+- Do not invent fields not described above.
 `;
 
 const cleanLLMJson = (raw: string): string => {
@@ -46,6 +40,7 @@ export default function AIInput({ onJsonResult, onCancel }: AIInputProps) {
     setLoading(true);
     setError('');
     try {
+      // Step 1: Start the job
       const res = await fetch('/api/gemini-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -54,18 +49,41 @@ export default function AIInput({ onJsonResult, onCancel }: AIInputProps) {
       if (!res.ok) {
         let errorDetails = '';
         try {
-          // Try to get more info from the response body
           const text = await res.text();
           errorDetails = text ? ` | Response: ${text}` : '';
-        } catch {
-          // Ignore if reading body fails
-        }
+        } catch {}
         throw new Error(`API error: ${res.status} ${res.statusText}${errorDetails}`);
       }
       const data = await res.json();
-      if (!data || !data.result) throw new Error('No result from LLM');
-      const rawResult = typeof data.result === 'string' ? data.result : JSON.stringify(data.result);
-      const cleaned = cleanLLMJson(rawResult);
+      if (!data || !data.jobId) throw new Error('No job ID returned');
+      const jobId = data.jobId;
+
+      // Step 2: Poll for result
+      let attempts = 0;
+      const maxAttempts = 20; // ~40 seconds max
+      let jobResult = null;
+      while (attempts < maxAttempts) {
+        await new Promise(r => setTimeout(r, 2000)); // 2s delay
+        const statusRes = await fetch(`/api/gemini-template-status?id=${jobId}`);
+        if (!statusRes.ok) {
+          let errorDetails = '';
+          try {
+            const text = await statusRes.text();
+            errorDetails = text ? ` | Response: ${text}` : '';
+          } catch {}
+          throw new Error(`Status API error: ${statusRes.status} ${statusRes.statusText}${errorDetails}`);
+        }
+        const statusData = await statusRes.json();
+        if (statusData.status === 'done') {
+          jobResult = statusData.result;
+          break;
+        } else if (statusData.status === 'error') {
+          throw new Error(statusData.error || 'Unknown error in job');
+        }
+        attempts++;
+      }
+      if (!jobResult) throw new Error('Job timed out or did not complete');
+      const cleaned = cleanLLMJson(jobResult);
       const json: Record<string, unknown> = JSON.parse(cleaned);
       onJsonResult(json);
     } catch (e) {
